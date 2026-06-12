@@ -144,8 +144,9 @@
 
   /* ===== TELA DE DETALHE (full screen, navegação iFood) ===== */
   .screen{position:fixed;inset:0;z-index:70;max-width:var(--maxw);margin:0 auto;background:var(--preto);
-    display:flex;flex-direction:column;transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);overflow:hidden;}
-  .screen.show{transform:translateX(0);}
+    display:flex;flex-direction:column;transform:translateX(100%);overflow:hidden;
+    visibility:hidden;transition:transform .28s cubic-bezier(.2,.8,.2,1), visibility 0s linear .28s;}
+  .screen.show{transform:translateX(0);visibility:visible;transition:transform .28s cubic-bezier(.2,.8,.2,1), visibility 0s;}
   .screen .scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .det-hero{position:relative;height:260px;display:grid;place-items:center;font-size:96px;
     background:radial-gradient(circle at 40% 30%, rgba(15,184,196,.4), rgba(4,9,11,.85));}
