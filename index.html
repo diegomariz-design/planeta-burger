@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#04090b" />
 <title>Planeta Burger 👽 — O lanche de outro mundo</title>
 <style>
   :root{
@@ -238,6 +239,9 @@
   .btn-ghost{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--borda);color:var(--branco);padding:13px;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;margin-top:10px;}
   .hint{font-size:11.5px;color:var(--cinza2);text-align:center;margin-top:10px;line-height:1.4;}
   .err{color:#ff7a7a;font-size:12px;margin-top:6px;display:none;}
+  .wa-preview{text-align:left;background:var(--card);border:1px solid var(--borda);border-radius:14px;padding:14px;
+    margin:16px 0 4px;font-size:13px;color:#dcffe6;white-space:pre-line;line-height:1.55;max-height:220px;overflow-y:auto;}
+  .wa-preview .wa-h{color:var(--neon);font-weight:800;margin-bottom:6px;}
   .hidden{display:none !important;}
 </style>
 </head>
@@ -388,6 +392,7 @@
     <h3 style="margin:0 0 8px;font-size:23px;">Pedido recebido!</h3>
     <p style="color:var(--cinza);margin:0;font-size:15px;">Seu pedido <b id="okNum" style="color:var(--neon)">#0000</b> foi registrado.</p>
     <p style="color:var(--cinza2);font-size:13px;margin:10px 0 0;line-height:1.5;">Toque em <b>Enviar no WhatsApp</b> para confirmar com a cozinha. Você acompanha tudo por lá. 👽</p>
+    <div class="wa-preview" id="waPreview"></div>
   </div>
   <div class="sfoot">
     <button class="btn-primary" onclick="enviarPedidoWhats()">🟢 Enviar pedido no WhatsApp</button>
@@ -403,6 +408,22 @@ const CONFIG = {
   minPedido:20.00,
   aberto:true
 };
+
+/* ===================== BACKEND OPCIONAL (Supabase) =====================
+   Deixe url/key VAZIOS para o site funcionar só com WhatsApp.
+   Para os pedidos caírem num painel ao vivo:
+   1) Crie um projeto em https://supabase.com
+   2) Crie a tabela "orders" (com RLS permitindo INSERT anônimo)
+   3) Cole abaixo a URL do projeto e a chave publishable (anon).
+   NÃO use a chave de service_role aqui (é um site público).            */
+const SUPA = { url:"", key:"" };
+function sbInsertOrder(row){
+  if(!SUPA.url || !SUPA.key) return Promise.resolve({skipped:true});
+  return fetch(SUPA.url+"/rest/v1/orders",{method:"POST",
+    headers:{apikey:SUPA.key,Authorization:"Bearer "+SUPA.key,"Content-Type":"application/json",Prefer:"return=minimal"},
+    body:JSON.stringify(row)}).catch(e=>{console.warn("Supabase insert falhou:",e);});
+}
+function escapeHtml(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 /* adicionais padrão (lanches) */
 const ADIC = [
@@ -755,6 +776,19 @@ ${pgTxt}${obs?"\n\n*Observações:* "+obs:""}`;
 
   lastOrderUrl=`https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`;
   document.getElementById("okNum").textContent="#"+numero;
+  document.getElementById("waPreview").innerHTML=`<div class="wa-h">📲 Prévia da mensagem WhatsApp</div>${escapeHtml(msg)}`;
+
+  // grava o pedido no backend (se Supabase estiver configurado) — cai no painel ao vivo
+  const itensArr=cart.map(l=>({n:l.n,q:l.q,p:l.base,adic:l.adic||[],obs:l.notes||""}));
+  sbInsertOrder({
+    numero:String(numero), cliente:nome, whatsapp:fone,
+    tipo: isEntrega()?"entrega":"retirada",
+    endereco: isEntrega()?(val("f_rua")+(val("f_num")?", "+val("f_num"):"")):"Retirada no local",
+    bairro: val("f_bairro")||"", pagamento:pg, troco:(pg==="Dinheiro"?val("f_troco"):"")||"",
+    itens:itensArr, subtotal:sub, taxa:taxa, total:total, obs:obs||"",
+    status:"novo", historico:[{ts:new Date().toISOString(),de:null,para:"novo",user:"site"}]
+  });
+
   showSheet("successSheet");
 }
 
