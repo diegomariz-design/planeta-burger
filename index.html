@@ -290,7 +290,12 @@
   <!-- CARDÁPIO -->
   <main id="menu"></main>
 
-  <footer>Planeta Burger 👽 · WhatsApp (16) 99625-9742 · @planetaburgerr</footer>
+  <footer>
+    <b style="color:var(--cinza)">Planeta Burger 👽</b> — O lanche de outro mundo<br>
+    🛵 Entrega &amp; Retirada · Ter a Dom, 18h às 23h<br>
+    WhatsApp (16) 99625-9742 · @planetaburgerr<br>
+    <span style="opacity:.7">Pedidos confirmados pelo WhatsApp.</span>
+  </footer>
 </div>
 
 <!-- CART BAR -->
@@ -369,9 +374,24 @@
     </div>
   </div>
   <div class="sfoot">
-    <button class="btn-primary" onclick="enviarWhatsApp()">🟢 Enviar pedido no WhatsApp</button>
+    <button class="btn-primary" onclick="confirmarPedido()">✅ Confirmar pedido</button>
     <button class="btn-ghost" onclick="backToCart()">← Voltar à sacola</button>
-    <p class="hint">Ao enviar, abre o WhatsApp da Planeta Burger com seu pedido montado. 👽</p>
+    <p class="hint">Você confere o resumo e envia pelo WhatsApp no próximo passo. 👽</p>
+  </div>
+</div>
+
+<!-- SUCESSO / CONFIRMAÇÃO -->
+<div class="sheet" id="successSheet">
+  <div class="grab"></div>
+  <div class="sbody" style="text-align:center;padding:34px 22px 10px;">
+    <div style="font-size:62px;line-height:1;margin-bottom:8px;">✅</div>
+    <h3 style="margin:0 0 8px;font-size:23px;">Pedido recebido!</h3>
+    <p style="color:var(--cinza);margin:0;font-size:15px;">Seu pedido <b id="okNum" style="color:var(--neon)">#0000</b> foi registrado.</p>
+    <p style="color:var(--cinza2);font-size:13px;margin:10px 0 0;line-height:1.5;">Toque em <b>Enviar no WhatsApp</b> para confirmar com a cozinha. Você acompanha tudo por lá. 👽</p>
+  </div>
+  <div class="sfoot">
+    <button class="btn-primary" onclick="enviarPedidoWhats()">🟢 Enviar pedido no WhatsApp</button>
+    <button class="btn-ghost" onclick="novoPedido()">Fazer novo pedido</button>
   </div>
 </div>
 
@@ -618,16 +638,16 @@ function chgLine(id,d){
 
 /* ===================== SHEETS ===================== */
 function openCart(){ if(totals().count===0)return; renderCart(); showSheet("cartSheet"); }
+const ALL_SHEETS=["cartSheet","checkoutSheet","successSheet"];
 function showSheet(id){
   document.getElementById("overlay").classList.add("show");
-  document.getElementById("cartSheet").classList.remove("show");
-  document.getElementById("checkoutSheet").classList.remove("show");
+  ALL_SHEETS.forEach(s=>document.getElementById(s).classList.remove("show"));
   document.getElementById(id).classList.add("show"); document.body.style.overflow="hidden";
 }
 function closeSheets(){
   document.getElementById("overlay").classList.remove("show");
-  document.getElementById("cartSheet").classList.remove("show");
-  document.getElementById("checkoutSheet").classList.remove("show"); document.body.style.overflow="";
+  ALL_SHEETS.forEach(s=>document.getElementById(s).classList.remove("show"));
+  document.body.style.overflow="";
 }
 function backToCart(){ renderCart(); showSheet("cartSheet"); }
 function goCheckout(){ if(totals().count===0)return; if(totals().sub<CONFIG.minPedido)return; updateTotals(); showSheet("checkoutSheet"); }
@@ -674,7 +694,17 @@ function updateTotals(){
 function val(id){ return (document.getElementById(id).value||"").trim(); }
 function show_err(id,on){ document.getElementById(id).style.display=on?"block":"none"; }
 
-function enviarWhatsApp(){
+let lastOrderUrl="";
+
+// número de pedido sequencial por dispositivo (começa em 1001)
+function genOrderNumber(){
+  let n=1001;
+  try{ n=parseInt(localStorage.getItem("pb_order_seq")||"1000",10)+1;
+       localStorage.setItem("pb_order_seq",String(n)); }catch(e){ n=Math.floor(1000+Math.random()*9000); }
+  return n;
+}
+
+function confirmarPedido(){
   const nome=val("f_nome"), fone=val("f_fone");
   const foneDigits=fone.replace(/\D/g,"");
   const nomeOk=nome.length>=2, foneOk=foneDigits.length>=10;
@@ -682,6 +712,7 @@ function enviarWhatsApp(){
   show_err("e_nome",!nomeOk); show_err("e_fone",!foneOk); show_err("e_end",!endOk);
   if(!(nomeOk&&foneOk&&endOk)) return;
 
+  const numero=genOrderNumber();
   const {sub}=totals();
   const taxa=isEntrega()?CONFIG.taxaEntrega:0;
   const total=sub+taxa;
@@ -708,6 +739,8 @@ function enviarWhatsApp(){
   const msg=
 `👽 *Novo pedido — Planeta Burger*
 
+*Pedido:* #${numero}
+
 *Cliente:*
 Nome: ${nome}
 WhatsApp: ${fone}
@@ -720,7 +753,20 @@ ${taxa>0?"*Taxa de entrega:* "+brl(taxa)+"\n":""}*Total:* ${brl(total)}
 
 ${pgTxt}${obs?"\n\n*Observações:* "+obs:""}`;
 
-  window.open(`https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`,"_blank");
+  lastOrderUrl=`https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`;
+  document.getElementById("okNum").textContent="#"+numero;
+  showSheet("successSheet");
+}
+
+function enviarPedidoWhats(){ if(lastOrderUrl) window.open(lastOrderUrl,"_blank"); }
+
+function novoPedido(){
+  cart=[]; lastOrderUrl="";
+  ["f_nome","f_fone","f_rua","f_num","f_bairro","f_comp","f_ref","f_troco","f_obs"].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value="";
+  });
+  syncAll(); closeSheets();
+  window.scrollTo({top:0,behavior:"smooth"});
 }
 
 /* ===================== STATUS / CONFIG NA TELA ===================== */
