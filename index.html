@@ -416,7 +416,7 @@ const CONFIG = {
    2) Crie a tabela "orders" (com RLS permitindo INSERT anônimo)
    3) Cole abaixo a URL do projeto e a chave publishable (anon).
    NÃO use a chave de service_role aqui (é um site público).            */
-const SUPA = { url:"", key:"" };
+const SUPA = { url:"https://ldjpwamrlbzppkgukmlo.supabase.co", key:"sb_publishable_gkU4l7qMVchUVMT9TXIp_g_0ohm7pp1" };
 function sbInsertOrder(row){
   if(!SUPA.url || !SUPA.key) return Promise.resolve({skipped:true});
   return fetch(SUPA.url+"/rest/v1/orders",{method:"POST",
