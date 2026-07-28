@@ -229,6 +229,16 @@ function doLogin(){
 }
 document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 
+/* ===== modo embutido no /admin (?embed=1): sem login e sem cabeçalho ===== */
+const EMBED = new URLSearchParams(location.search).get('embed') === '1';
+if(EMBED){
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const top = document.querySelector('#app .top'); if(top) top.style.display = 'none';
+  document.body.style.background = 'transparent';
+  loadAll();
+}
+
 /* ================= HELPERS ================= */
 function brl(v){
   if(v===null || v===undefined || v==="") return "";
