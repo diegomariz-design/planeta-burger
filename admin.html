@@ -443,7 +443,7 @@ function sbActive(){ return !!(SUPA.url && SUPA.key); }
 function sbHeaders(extra){ return Object.assign({apikey:SUPA.key,Authorization:"Bearer "+SUPA.key,"Content-Type":"application/json"}, extra||{}); }
 /* mapeia uma linha do Supabase -> objeto de pedido usado no painel */
 function sbRowToOrder(r){ return {
-  id:r.id, numero:r.numero, cliente:r.cliente, whatsapp:r.whatsapp,
+  id:String(r.id), numero:r.numero, cliente:r.cliente, whatsapp:r.whatsapp,
   tipo:r.tipo||"entrega", endereco:r.endereco||"", bairro:r.bairro||"",
   pagamento:r.pagamento||"", troco:r.troco||"",
   itens:r.itens||[], subtotal:+r.subtotal||0, taxa:+r.taxa||0, total:+r.total||0,
@@ -451,7 +451,7 @@ function sbRowToOrder(r){ return {
   entregador:r.entregador||"", created_at:r.created_at||nowISO(), historico:r.historico||[] }; }
 /* mapeia objeto de pedido -> linha para PATCH no Supabase
    (só campos que o admin atualiza: status, historico, motivo, entregador) */
-function sbOrderToPatch(o){ return { status:o.status, historico:o.historico, motivo_cancel:o.motivoCancel||"", entregador:o.entregador||"" }; }
+function sbOrderToPatch(o){ return { status:o.status, historico:o.historico, tipo:o.tipo }; }
 /* PATCH /rest/v1/orders?numero=eq.<numero> */
 function sbPatchOrder(o){ if(!sbActive()||!o.numero||(DB&&DB._demo)) return;
   fetch(SUPA.url+"/rest/v1/orders?numero=eq."+encodeURIComponent(o.numero),
