@@ -426,7 +426,7 @@ function sbInsertOrder(row){
 function escapeHtml(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 /* adicionais padrão (lanches) */
-const ADIC = [
+let ADIC = [
   {n:"Bacon", p:5, e:"🥓"},
   {n:"Catupiry Scala", p:6, e:"🧀"},
   {n:"Queijo prato", p:4, e:"🧀"},
@@ -439,11 +439,11 @@ const ADIC = [
 ];
 
 /* categorias que recebem adicionais */
-const COM_ADIC = new Set(["Hambúrguer Artesanal","Especial da Casa","Cachorro Quente","Frango","Contra Filé"]);
+let COM_ADIC = new Set(["Hambúrguer Artesanal","Especial da Casa","Cachorro Quente","Frango","Contra Filé"]);
 
 /* ===================== CARDÁPIO =====================
    old = preço "de" (mostra desconto) · feat = aparece nos Destaques · tag = selo */
-const MENU = [
+let MENU = [
   { cat:"Hambúrguer Artesanal", emoji:"🍔", items:[
     {n:"X-Burger", p:19, d:"Pão, hambúrguer e queijo"},
     {n:"X-Salada", p:21, d:"Pão, hambúrguer, queijo, alface e tomate"},
@@ -504,7 +504,11 @@ let lineSeq = 1;
 const brl = v => "R$ " + v.toFixed(2).replace(".", ",");
 const pct = (old,p) => Math.round((old-p)/old*100);
 
-/* ===================== RENDER DESTAQUES ===================== */
+/* ===================== RENDER DO CARDÁPIO ===================== */
+function renderMenu(){
+  document.getElementById("destaques").innerHTML="";
+  document.getElementById("menu").innerHTML="";
+  document.getElementById("catNav").innerHTML="";
 const destEl = document.getElementById("destaques");
 MENU.forEach((sec,ci)=> sec.items.forEach((it,ii)=>{
   if(!it.feat) return;
@@ -567,6 +571,33 @@ const obsCat=new IntersectionObserver((ents)=>{
   }});
 },{rootMargin:"-45% 0px -50% 0px"});
 secs.forEach(s=>obsCat.observe(s));
+} /* fim renderMenu */
+
+/* ===== carrega o cardápio do Supabase (com fallback pro cardápio fixo) ===== */
+async function loadMenu(){
+  try{
+    if(!SUPA.url||!SUPA.key) throw new Error("sem supabase");
+    const H={apikey:SUPA.key,Authorization:"Bearer "+SUPA.key};
+    const [cats,prods,adics]=await Promise.all([
+      fetch(SUPA.url+"/rest/v1/categorias?ativo=eq.true&order=ordem.asc",{headers:H}).then(r=>r.json()),
+      fetch(SUPA.url+"/rest/v1/produtos?ativo=eq.true&order=ordem.asc",{headers:H}).then(r=>r.json()),
+      fetch(SUPA.url+"/rest/v1/adicionais?ativo=eq.true&order=ordem.asc",{headers:H}).then(r=>r.json())
+    ]);
+    if(Array.isArray(cats)&&cats.length&&Array.isArray(prods)){
+      MENU=cats.map(c=>({cat:c.nome,emoji:c.emoji||"🍔",
+        items:prods.filter(p=>p.categoria_id===c.id).map(p=>({
+          n:p.nome, p:Number(p.preco), d:p.descricao||"",
+          old:(p.promo!=null?Number(p.promo):undefined),
+          feat:!!p.destaque, tag:(p.destaque?"Destaque":undefined)
+        }))
+      })).filter(c=>c.items.length);
+      if(Array.isArray(adics)&&adics.length) ADIC=adics.map(a=>({n:a.nome,p:Number(a.preco),e:"➕"}));
+      COM_ADIC=new Set(cats.filter(c=>prods.some(p=>p.categoria_id===c.id&&p.aceita_adicionais)).map(c=>c.nome));
+    }
+  }catch(e){ console.warn("cardápio: usando fallback local",e); }
+  renderMenu();
+}
+loadMenu();
 
 /* ===================== QUICK ADD (botão +) ===================== */
 function quickAdd(ci,ii){
