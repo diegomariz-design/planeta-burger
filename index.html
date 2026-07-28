@@ -779,7 +779,7 @@ ${pgTxt}${obs?"\n\n*Observações:* "+obs:""}`;
   document.getElementById("waPreview").innerHTML=`<div class="wa-h">📲 Prévia da mensagem WhatsApp</div>${escapeHtml(msg)}`;
 
   // grava o pedido no backend (se Supabase estiver configurado) — cai no painel ao vivo
-  const itensArr=cart.map(l=>({n:l.n,q:l.q,p:l.base,adic:l.adic||[],obs:l.notes||""}));
+  const itensArr=cart.map(l=>({n:l.n,q:l.q,p:l.base,adic:(l.adic||[]).map(a=>a.c+"x "+a.n),obs:l.notes||""}));
   sbInsertOrder({
     numero:String(numero), cliente:nome, whatsapp:fone,
     tipo: isEntrega()?"entrega":"retirada",
