@@ -409,20 +409,12 @@ const CONFIG = {
   aberto:true
 };
 
-/* ===================== BACKEND OPCIONAL (Supabase) =====================
-   Deixe url/key VAZIOS para o site funcionar só com WhatsApp.
-   Para os pedidos caírem num painel ao vivo:
-   1) Crie um projeto em https://supabase.com
-   2) Crie a tabela "orders" (com RLS permitindo INSERT anônimo)
-   3) Cole abaixo a URL do projeto e a chave publishable (anon).
-   NÃO use a chave de service_role aqui (é um site público).            */
+/* ===================== BACKEND (Supabase) =====================
+   Só a chave PUBLISHABLE/anon fica aqui (é pública por design).
+   O pedido é criado pelo RPC seguro create_order (preço calculado no
+   servidor). NÃO há insert direto de pedido no frontend, e a
+   service_role NUNCA fica aqui.                                    */
 const SUPA = { url:"https://ldjpwamrlbzppkgukmlo.supabase.co", key:"sb_publishable_gkU4l7qMVchUVMT9TXIp_g_0ohm7pp1" };
-function sbInsertOrder(row){
-  if(!SUPA.url || !SUPA.key) return Promise.resolve({skipped:true});
-  return fetch(SUPA.url+"/rest/v1/orders",{method:"POST",
-    headers:{apikey:SUPA.key,Authorization:"Bearer "+SUPA.key,"Content-Type":"application/json",Prefer:"return=minimal"},
-    body:JSON.stringify(row)}).catch(e=>{console.warn("Supabase insert falhou:",e);});
-}
 function escapeHtml(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
 
 /* adicionais padrão (lanches) */
@@ -467,7 +459,7 @@ let MENU = [
     {n:"Misto Quente", p:16, d:"Presunto, queijo e tomate"},
     {n:"Misto com Bacon", p:21, d:"Presunto, queijo e bacon"},
   ]},
-  { cat:"Frango", emoji:"🐔", items:[
+  { cat:"Frango", emoji:"🍗", items:[
     {n:"X Frango", p:25, d:"Pão de hambúrguer, frango desfiado e queijo prato"},
     {n:"X Frango Salada", p:28, d:"Pão de hambúrguer, frango desfiado, queijo prato, alface e tomate"},
     {n:"Frango Tudo", p:34, old:38, feat:true, d:"Pão, frango desfiado, queijo prato, presunto, ovo, bacon, alface e tomate"},
@@ -586,12 +578,12 @@ async function loadMenu(){
     if(Array.isArray(cats)&&cats.length&&Array.isArray(prods)){
       MENU=cats.map(c=>({cat:c.nome,emoji:c.emoji||"🍔",
         items:prods.filter(p=>p.categoria_id===c.id).map(p=>({
-          n:p.nome, p:Number(p.preco), d:p.descricao||"",
+          id:p.id, n:p.nome, p:Number(p.preco), d:p.descricao||"",
           old:(p.promo!=null?Number(p.promo):undefined),
           feat:!!p.destaque, tag:(p.destaque?"Destaque":undefined)
         }))
       })).filter(c=>c.items.length);
-      if(Array.isArray(adics)&&adics.length) ADIC=adics.map(a=>({n:a.nome,p:Number(a.preco),e:"➕"}));
+      if(Array.isArray(adics)&&adics.length) ADIC=adics.map(a=>({id:a.id,n:a.nome,p:Number(a.preco),e:"➕"}));
       COM_ADIC=new Set(cats.filter(c=>prods.some(p=>p.categoria_id===c.id&&p.aceita_adicionais)).map(c=>c.nome));
     }
   }catch(e){ console.warn("cardápio: usando fallback local",e); }
@@ -663,7 +655,7 @@ function detQty(d){ det.q=Math.max(1,det.q+d); document.getElementById("detQ").t
 function detAdd(){
   const it=MENU[det.ci].items[det.ii];
   const adic=[];
-  if(det.adic.length) ADIC.forEach((a,k)=>{ if(det.adic[k]>0) adic.push({n:a.n,p:a.p,c:det.adic[k]}); });
+  if(det.adic.length) ADIC.forEach((a,k)=>{ if(det.adic[k]>0) adic.push({id:a.id,n:a.n,p:a.p,c:det.adic[k]}); });
   const notes=(document.getElementById("detObs")?.value||"").trim();
   cart.push({id:lineSeq++,ci:det.ci,ii:det.ii,n:it.n,base:it.p,q:det.q,adic,notes,emoji:MENU[det.ci].emoji});
   closeDetail(); syncAll(); bump();
@@ -756,7 +748,9 @@ function genOrderNumber(){
   return n;
 }
 
-function confirmarPedido(){
+let _enviando=false;
+async function confirmarPedido(){
+  if(_enviando) return;
   const nome=val("f_nome"), fone=val("f_fone");
   const foneDigits=fone.replace(/\D/g,"");
   const nomeOk=nome.length>=2, foneOk=foneDigits.length>=10;
@@ -764,62 +758,74 @@ function confirmarPedido(){
   show_err("e_nome",!nomeOk); show_err("e_fone",!foneOk); show_err("e_end",!endOk);
   if(!(nomeOk&&foneOk&&endOk)) return;
 
-  const numero=genOrderNumber();
-  const {sub}=totals();
-  const taxa=isEntrega()?CONFIG.taxaEntrega:0;
-  const total=sub+taxa;
-
-  let itens="";
-  cart.forEach(l=>{
-    itens+=`• ${l.q}x ${l.n} — ${brl(lineTotal(l))}\n`;
-    l.adic.forEach(a=>itens+=`   ＋ ${a.c}x ${a.n}\n`);
-    if(l.notes) itens+=`   obs: ${l.notes}\n`;
-  });
-
-  let entrega = isEntrega()
-    ? `*Entrega:* 🛵\nEndereço: ${val("f_rua")}${val("f_num")?", "+val("f_num"):""}\n`+
-      (val("f_bairro")?`Bairro: ${val("f_bairro")}\n`:"")+
-      (val("f_comp")?`Complemento: ${val("f_comp")}\n`:"")+
-      (val("f_ref")?`Referência: ${val("f_ref")}\n`:"")
-    : `*Retirada no local* 🏠\n`;
-
   const pg=document.querySelector('input[name="pg"]:checked').value;
+  const tipo=isEntrega()?"entrega":"retirada";
+  // envia SÓ product_id + qty (+ obs/adic ids). O servidor calcula o preço.
+  const p_items=cart.map(l=>{
+    const prod=MENU[l.ci]&&MENU[l.ci].items[l.ii];
+    if(!prod||prod.id==null) return null;
+    const adic=(l.adic||[]).flatMap(a=>Array(Math.max(1,a.c||1)).fill(a.id)).filter(x=>x!=null);
+    return { product_id:prod.id, qty:l.q, obs:l.notes||"", adic };
+  }).filter(Boolean);
+  if(!p_items.length){ alert("Sua sacola está vazia."); return; }
+
+  const endereco = tipo==="entrega"
+    ? (val("f_rua")+(val("f_num")?", "+val("f_num"):"")+(val("f_comp")?" - "+val("f_comp"):"")+(val("f_ref")?" (ref: "+val("f_ref")+")":""))
+    : "Retirada no local";
+  const payload={ p_cliente:nome, p_whatsapp:fone, p_tipo:tipo,
+    p_endereco:endereco, p_bairro: tipo==="entrega"?val("f_bairro"):"",
+    p_pagamento:pg, p_troco:(pg==="Dinheiro"?val("f_troco"):""), p_obs:val("f_obs"),
+    p_items };
+
+  const btn=document.querySelector('#checkoutSheet .btn-primary');
+  _enviando=true; if(btn){btn.disabled=true;btn.textContent="Enviando…";}
+  let j=null, ok=false;
+  try{
+    const r=await fetch(SUPA.url+"/rest/v1/rpc/create_order",{method:"POST",
+      headers:{apikey:SUPA.key,Authorization:"Bearer "+SUPA.key,"Content-Type":"application/json"},
+      body:JSON.stringify(payload)});
+    j=await r.json(); ok=r.ok;
+  }catch(e){ j={message:"Falha de conexão. Tente novamente."}; }
+  _enviando=false; if(btn){btn.disabled=false;btn.textContent="✅ Confirmar pedido";}
+
+  if(!ok || !j || !j.numero){
+    alert((j&&j.message)? ("Não foi possível enviar: "+j.message) : "Não foi possível enviar o pedido. Tente novamente.");
+    return;
+  }
+
+  // mensagem do WhatsApp montada com os DADOS DO SERVIDOR (nunca o total do cliente)
+  let itens="";
+  (j.itens||[]).forEach(l=>{
+    itens+=`• ${l.qty}x ${l.nome} — ${brl(l.subtotal)}\n`;
+    (l.adic||[]).forEach(a=>itens+=`   ＋ ${a.nome}\n`);
+    if(l.obs) itens+=`   obs: ${l.obs}\n`;
+  });
+  const entregaTxt = j.tipo==="entrega"
+    ? `*Entrega:* 🛵\nEndereço: ${endereco}\n`+(val("f_bairro")?`Bairro: ${val("f_bairro")}\n`:"")
+    : `*Retirada no local* 🏠\n`;
   let pgTxt=`*Pagamento:* ${pg}`;
   if(pg==="Dinheiro"&&val("f_troco")) pgTxt+=` (troco para R$ ${val("f_troco")})`;
   const obs=val("f_obs");
-
   const msg=
 `👽 *Novo pedido — Planeta Burger*
 
-*Pedido:* #${numero}
+*Pedido:* #${j.numero}
 
 *Cliente:*
 Nome: ${nome}
 WhatsApp: ${fone}
 
-${entrega}
+${entregaTxt}
 *Itens:*
 ${itens}
-*Subtotal:* ${brl(sub)}
-${taxa>0?"*Taxa de entrega:* "+brl(taxa)+"\n":""}*Total:* ${brl(total)}
+*Subtotal:* ${brl(j.subtotal)}
+${j.taxa>0?"*Taxa de entrega:* "+brl(j.taxa)+"\n":""}*Total:* ${brl(j.total)}
 
 ${pgTxt}${obs?"\n\n*Observações:* "+obs:""}`;
 
   lastOrderUrl=`https://wa.me/${CONFIG.whatsapp}?text=${encodeURIComponent(msg)}`;
-  document.getElementById("okNum").textContent="#"+numero;
+  document.getElementById("okNum").textContent="#"+j.numero;
   document.getElementById("waPreview").innerHTML=`<div class="wa-h">📲 Prévia da mensagem WhatsApp</div>${escapeHtml(msg)}`;
-
-  // grava o pedido no backend (se Supabase estiver configurado) — cai no painel ao vivo
-  const itensArr=cart.map(l=>({n:l.n,q:l.q,p:l.base,adic:(l.adic||[]).map(a=>a.c+"x "+a.n),obs:l.notes||""}));
-  sbInsertOrder({
-    numero:String(numero), cliente:nome, whatsapp:fone,
-    tipo: isEntrega()?"entrega":"retirada",
-    endereco: isEntrega()?(val("f_rua")+(val("f_num")?", "+val("f_num"):"")):"Retirada no local",
-    bairro: val("f_bairro")||"", pagamento:pg, troco:(pg==="Dinheiro"?val("f_troco"):"")||"",
-    itens:itensArr, subtotal:sub, taxa:taxa, total:total, obs:obs||"",
-    status:"novo", historico:[{ts:new Date().toISOString(),de:null,para:"novo",user:"site"}]
-  });
-
   showSheet("successSheet");
 }
 
