@@ -208,36 +208,67 @@
 <script>
 /* ================= SUPABASE CONFIG ================= */
 const SUPA = { url:"https://ldjpwamrlbzppkgukmlo.supabase.co", key:"sb_publishable_gkU4l7qMVchUVMT9TXIp_g_0ohm7pp1" };
-// Chave publishable pública — ok embutir. RLS/segurança real ficam no Supabase.
-const HEADERS = {
-  apikey: SUPA.key,
-  "Authorization": "Bearer " + SUPA.key,
-  "Content-Type": "application/json"
-};
+// Chave publishable pública — ok embutir. Segurança real via RLS + Supabase Auth.
 
-/* ================= LOGIN (client-side only) ================= */
-const senha = "planeta123"; // Gate somente no cliente, não é segurança real.
-function doLogin(){
-  const pass = document.getElementById('loginPass').value;
-  if(pass === senha){
-    document.getElementById('login').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
+/* ===== AUTH REAL (Supabase) — compartilha a sessão com o /admin ===== */
+const SK = 'pb_admin_session';
+function _gs(){ try{return JSON.parse(localStorage.getItem(SK)||'null')}catch(e){return null} }
+function _ss(s){ try{localStorage.setItem(SK,JSON.stringify(s))}catch(e){} }
+function _ok(s){ return !!(s&&s.access_token&&s.expires_at&&(s.expires_at*1000-Date.now()>60000)); }
+function _em(u){ return (u&&u.indexOf('@')>-1)?u:((u||'admin')+'@planetaburger.app'); }
+function _tok(){ const s=_gs(); return _ok(s)?s.access_token:null; }
+// Header dinâmico: usa o token do admin logado (fallback anon só para leitura pública)
+function hdr(extra){
+  const t=_tok();
+  return Object.assign({ apikey:SUPA.key, "Authorization":"Bearer "+(t||SUPA.key), "Content-Type":"application/json" }, extra||{});
+}
+async function _refresh(s){
+  if(!s||!s.refresh_token) return null;
+  try{
+    const r=await fetch(SUPA.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:SUPA.key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});
+    const j=await r.json(); if(j&&j.access_token){ _ss(j); return j; }
+  }catch(e){}
+  return null;
+}
+
+/* ================= LOGIN (Supabase Auth real) ================= */
+async function doLogin(){
+  const u=(document.getElementById('loginUser')||{}).value||'';
+  const p=(document.getElementById('loginPass')||{}).value||'';
+  const e=document.getElementById('loginErr'); if(e) e.textContent='';
+  if(!p){ if(e) e.textContent='Informe a senha.'; return; }
+  try{
+    const r=await fetch(SUPA.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:SUPA.key,'Content-Type':'application/json'},body:JSON.stringify({email:_em(u),password:p})});
+    const j=await r.json();
+    if(!r.ok||!j.access_token){ if(e) e.textContent='Usuário ou senha incorretos.'; return; }
+    _ss(j);
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
     loadAll();
-  } else {
-    document.getElementById('loginErr').textContent = 'Senha incorreta.';
-  }
+  }catch(x){ if(e) e.textContent='Falha de conexão.'; }
 }
 document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 
-/* ===== modo embutido no /admin (?embed=1): sem login e sem cabeçalho ===== */
+/* ===== modo embutido no /admin (?embed=1): herda a sessão do painel ===== */
 const EMBED = new URLSearchParams(location.search).get('embed') === '1';
-if(EMBED){
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  const top = document.querySelector('#app .top'); if(top) top.style.display = 'none';
-  document.body.style.background = 'transparent';
-  loadAll();
+async function _boot(){
+  if(EMBED){
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    const top = document.querySelector('#app .top'); if(top) top.style.display = 'none';
+    document.body.style.background = 'transparent';
+    loadAll();
+    return;
+  }
+  let s=_gs();
+  if(!_ok(s) && s && s.refresh_token){ s=await _refresh(s); }
+  if(_ok(s)){
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
+    loadAll();
+  }
 }
+_boot();
 
 /* ================= HELPERS ================= */
 function brl(v){
@@ -270,14 +301,14 @@ function showErr(msg){
 
 /* ================= REST WRAPPERS ================= */
 async function apiList(table){
-  const res = await fetch(SUPA.url + "/rest/v1/" + table + "?order=ordem.asc", { headers: HEADERS });
+  const res = await fetch(SUPA.url + "/rest/v1/" + table + "?order=ordem.asc", { headers: hdr() });
   if(!res.ok) throw new Error("Falha ao listar " + table + " (" + res.status + ")");
   return res.json();
 }
 async function apiCreate(table, obj){
   const res = await fetch(SUPA.url + "/rest/v1/" + table, {
     method: "POST",
-    headers: { ...HEADERS, "Prefer": "return=representation" },
+    headers: hdr({ "Prefer": "return=representation" }),
     body: JSON.stringify(obj)
   });
   if(!res.ok) throw new Error("Falha ao criar em " + table + " (" + res.status + ")");
@@ -286,7 +317,7 @@ async function apiCreate(table, obj){
 async function apiUpdate(table, id, obj){
   const res = await fetch(SUPA.url + "/rest/v1/" + table + "?id=eq." + id, {
     method: "PATCH",
-    headers: { ...HEADERS, "Prefer": "return=representation" },
+    headers: hdr({ "Prefer": "return=representation" }),
     body: JSON.stringify(obj)
   });
   if(!res.ok) throw new Error("Falha ao atualizar em " + table + " (" + res.status + ")");
@@ -295,7 +326,7 @@ async function apiUpdate(table, id, obj){
 async function apiDelete(table, id){
   const res = await fetch(SUPA.url + "/rest/v1/" + table + "?id=eq." + id, {
     method: "DELETE",
-    headers: HEADERS
+    headers: hdr()
   });
   if(!res.ok) throw new Error("Falha ao excluir em " + table + " (" + res.status + ")");
   return true;
