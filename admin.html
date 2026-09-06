@@ -1233,5 +1233,38 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){ closeModal(); }
 });
 </script>
-<script>if(typeof VIEWS!=='undefined'){VIEWS.cardapio=function(){document.getElementById('content').innerHTML='<iframe src="/cardapio?embed=1" title="Cardapio" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:14px;background:#04090b"></iframe>';};}</script><script>(function(){let d=null;function setup(){document.querySelectorAll('.kcard').forEach(c=>{if(c.dataset.dnd)return;c.dataset.dnd='1';c.setAttribute('draggable','true');c.addEventListener('dragstart',e=>{d=(c.getAttribute('onclick')||'').split("'")[1]||null;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',d||'')}catch(_){}c.style.opacity='.5'});c.addEventListener('dragend',()=>{c.style.opacity='';d=null})});document.querySelectorAll('.kcol').forEach(col=>{if(col.dataset.dnd)return;col.dataset.dnd='1';col.addEventListener('dragover',e=>{e.preventDefault();col.style.outline='2px dashed #39ff5b'});col.addEventListener('dragleave',()=>{col.style.outline=''});col.addEventListener('drop',e=>{e.preventDefault();col.style.outline='';const id=d||e.dataTransfer.getData('text/plain');if(!id)return;const l=col.querySelector('.kcol-head .t');const label=l?l.textContent.trim():'';const st=(typeof STATUSES!=='undefined')?STATUSES.find(s=>s.label===label):null;if(st&&typeof setStatus==='function')setStatus(id,st.key)})})}function start(){const ct=document.getElementById('content');if(ct)new MutationObserver(()=>setup()).observe(ct,{childList:true,subtree:true});setup();setInterval(setup,1500)}if(document.readyState!=='loading')start();else document.addEventListener('DOMContentLoaded',start)})();</script></body>
+<script>if(typeof VIEWS!=='undefined'){VIEWS.cardapio=function(){document.getElementById('content').innerHTML='<iframe src="/cardapio?embed=1" title="Cardapio" style="width:100%;height:calc(100vh - 96px);border:0;border-radius:14px;background:#04090b"></iframe>';};}</script><script>(function(){let d=null;function setup(){document.querySelectorAll('.kcard').forEach(c=>{if(c.dataset.dnd)return;c.dataset.dnd='1';c.setAttribute('draggable','true');c.addEventListener('dragstart',e=>{d=(c.getAttribute('onclick')||'').split("'")[1]||null;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',d||'')}catch(_){}c.style.opacity='.5'});c.addEventListener('dragend',()=>{c.style.opacity='';d=null})});document.querySelectorAll('.kcol').forEach(col=>{if(col.dataset.dnd)return;col.dataset.dnd='1';col.addEventListener('dragover',e=>{e.preventDefault();col.style.outline='2px dashed #39ff5b'});col.addEventListener('dragleave',()=>{col.style.outline=''});col.addEventListener('drop',e=>{e.preventDefault();col.style.outline='';const id=d||e.dataTransfer.getData('text/plain');if(!id)return;const l=col.querySelector('.kcol-head .t');const label=l?l.textContent.trim():'';const st=(typeof STATUSES!=='undefined')?STATUSES.find(s=>s.label===label):null;if(st&&typeof setStatus==='function')setStatus(id,st.key)})})}function start(){const ct=document.getElementById('content');if(ct)new MutationObserver(()=>setup()).observe(ct,{childList:true,subtree:true});setup();setInterval(setup,1500)}if(document.readyState!=='loading')start();else document.addEventListener('DOMContentLoaded',start)})();</script><script>
+/* ===== AUTH REAL (Supabase) — retrofit; substitui a senha-cliente ===== */
+(function(){
+  var U=SUPA.url, A=SUPA.key, SK='pb_admin_session';
+  try{ localStorage.removeItem('planetaburger_session'); }catch(e){}
+  function gs(){ try{return JSON.parse(localStorage.getItem(SK)||'null')}catch(e){return null} }
+  function ss(s){ try{localStorage.setItem(SK,JSON.stringify(s))}catch(e){} }
+  function cs(){ try{localStorage.removeItem(SK)}catch(e){} }
+  function ok(s){ return !!(s&&s.access_token&&s.expires_at&&(s.expires_at*1000-Date.now()>60000)); }
+  function em(u){ return (u&&u.indexOf('@')>-1)?u:((u||'admin')+'@planetaburger.app'); }
+  window.__tok=function(){ var s=gs(); return ok(s)?s.access_token:null; };
+  window.sbHeaders=function(x){ var t=window.__tok(); return Object.assign({apikey:A,Authorization:'Bearer '+(t||A),'Content-Type':'application/json'}, x||{}); };
+  window.doLogin=async function(){
+    var u=(document.getElementById('loginUser')||{}).value||'';
+    var p=(document.getElementById('loginPass')||{}).value||'';
+    var e=document.getElementById('loginErr'); if(e)e.textContent='';
+    if(!p){ if(e)e.textContent='Informe a senha.'; return; }
+    try{
+      var r=await fetch(U+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:A,'Content-Type':'application/json'},body:JSON.stringify({email:em(u),password:p})});
+      var j=await r.json();
+      if(!r.ok||!j.access_token){ if(e)e.textContent='Usuario ou senha incorretos.'; return; }
+      ss(j); sp();
+    }catch(x){ if(e)e.textContent='Falha de conexao.'; }
+  };
+  window.logout=function(){ cs(); try{localStorage.removeItem('planetaburger_session')}catch(e){} location.reload(); };
+  function sp(){ var l=document.getElementById('login'),s=document.getElementById('shell'); if(l)l.style.display='none'; if(s)s.classList.add('on'); if(typeof boot==='function'){ try{boot()}catch(e){} } }
+  function sl(){ var l=document.getElementById('login'),s=document.getElementById('shell'); if(l)l.style.display=''; if(s)s.classList.remove('on'); }
+  async function rf(s){ if(!s||!s.refresh_token) return null; try{ var r=await fetch(U+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:A,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})}); var j=await r.json(); if(j&&j.access_token){ ss(j); return j; } }catch(e){} cs(); return null; }
+  async function gate(){ var s=gs(); if(ok(s)){ sp(); return; } if(s&&s.refresh_token){ s=await rf(s); if(ok(s)){ sp(); return; } } sl(); }
+  if(document.readyState!=='loading') gate(); else document.addEventListener('DOMContentLoaded', gate);
+  setInterval(function(){ var s=gs(); if(s&&!ok(s)&&s.refresh_token) rf(s); }, 240000);
+})();
+</script>
+</body>
 </html>
