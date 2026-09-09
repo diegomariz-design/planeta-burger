@@ -336,7 +336,7 @@ function timeAgo(iso){ const s=(Date.now()-new Date(iso).getTime())/1000;
   if(s<60)return "agora"; if(s<3600)return Math.floor(s/60)+" min"; if(s<86400)return Math.floor(s/3600)+"h"; return Math.floor(s/86400)+"d"; }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 function isToday(iso){ return String(iso).slice(0,10)===todayStr(); }
-function waLink(phone,text){ return "https://wa.me/"+String(phone||CONFIG.loja.whatsapp).replace(/\D/g,"")+"?text="+encodeURIComponent(text); }
+function waLink(phone,text){ return "https://wa.me/"+(function(_p){var d=String(_p).replace(/\D/g,"");return (d&&d.indexOf("55")!==0&&d.length<=11)?"55"+d:d;})(phone||CONFIG.loja.whatsapp)+"?text="+encodeURIComponent(text); }
 function mapsLink(addr){ return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(addr); }
 function tipoLabel(t){ return t==="retirada" ? "🏠 Retirada" : "🛵 Entrega"; }
 
@@ -676,7 +676,7 @@ function itemLine(i){
 
 function orderModal(id){
   const o=DB.orders.find(x=>x.id===id); if(!o)return;
-  const itens=(o.itens||[]).map(i=>`<div class="it"><span>${itemLine(i)}</span><span>${brl((Number(i.p)||0)*(Number(i.q)||0))}</span></div>`).join("");
+  const itens=(o.itens||[]).map(i=>`<div class="it"><span>${(i.qty||i.q||1)}&times; ${esc(i.nome||"")}${(i.adic&&i.adic.length)?" (+"+i.adic.map(a=>esc(a.nome)).join(", ")+")":""}</span><span>${brl(Number(i.subtotal)||(Number(i.preco_unit||i.p||0)*Number(i.qty||i.q||0)))}</span></div>`).join("");
   const flow=STATUSES.map(s=>`<button class="sf-btn ${s.key===o.status?"cur":""}" onclick="setStatus('${o.id}','${s.key}')">${s.label}</button>`).join("");
   const hist=(o.historico||[]).slice().reverse().map(h=>`<div class="h"><span class="tm">${fmtDateTime(h.ts)}</span><span>${h.de?( (ST[h.de]?ST[h.de].label:h.de)+" → "):""}<b style="color:#fff">${ST[h.para]?ST[h.para].label:esc(h.para)}</b> · ${esc(h.user)}</span></div>`).join("")||'<div style="color:var(--cinza2)">Sem histórico.</div>';
   const body=`
