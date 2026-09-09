@@ -133,6 +133,13 @@
     background:rgba(255,122,122,.1);border:1px solid rgba(255,122,122,.4);
     color:#ff9a9a;border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:.85rem;
   }
+  /* foto */
+  .card .thumb{width:54px;height:54px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid var(--borda);}
+  .foto-wrap{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
+  .foto-prev{width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--borda);}
+  .foto-prev.hide{display:none;}
+  .foto-status{font-size:.78rem;color:var(--cinza);}
+  .hide{display:none;}
 </style>
 </head>
 <body>
@@ -402,6 +409,7 @@ function produtoCard(p){
   if(p.destaque) badges += '<span class="badge star">⭐ Destaque</span>';
   if(p.aceita_adicionais) badges += '<span class="badge blue">aceita adicionais</span>';
   return '<div class="card">'
+    + (p.image_url?'<img class="thumb" src="'+esc(p.image_url)+'" alt="">':'')
     + '<div class="info">'
     +   '<div class="nome"><span class="emoji">'+esc(p.emoji||'')+'</span>'+esc(p.nome)+'</div>'
     +   (p.descricao?'<div class="desc">'+esc(p.descricao)+'</div>':'')
@@ -488,8 +496,18 @@ function openProduto(id){
     +   '<div class="field"><label>Preço promocional (opcional)</label><input id="p_promo" type="text" value="'+(p&&p.promo!=null?String(p.promo).replace(".",","):'')+'" placeholder="—"></div>'
     + '</div>'
     + '<div class="row2">'
-    +   '<div class="field"><label>Emoji</label><input id="p_emoji" type="text" value="'+esc(p?p.emoji:(''))+'" placeholder="🍔"></div>'
+    +   '<div class="field"><label>Emoji (usado se não tiver foto)</label><input id="p_emoji" type="text" value="'+esc(p?p.emoji:(''))+'" placeholder="🍔"></div>'
     +   '<div class="field"><label>Ordem</label><input id="p_ordem" type="number" value="'+(p?(p.ordem??0):0)+'"></div>'
+    + '</div>'
+    + '<div class="field"><label>Foto do produto</label>'
+    +   '<div class="foto-wrap">'
+    +     '<img id="p_img_prev" class="foto-prev'+((p&&p.image_url)?'':' hide')+'" src="'+esc(p&&p.image_url?p.image_url:'')+'">'
+    +     '<input type="file" id="p_img_file" accept="image/*" style="display:none" onchange="onFotoSel(event)">'
+    +     '<button type="button" class="btn ghost sm" onclick="pickFoto()">📷 Enviar foto</button>'
+    +     '<button type="button" class="btn danger sm" id="p_img_rm" style="'+((p&&p.image_url)?'':'display:none')+'" onclick="removeFoto()">Remover</button>'
+    +     '<span id="p_img_status" class="foto-status"></span>'
+    +   '</div>'
+    +   '<input type="hidden" id="p_image_url" value="'+esc(p&&p.image_url?p.image_url:'')+'">'
     + '</div>'
     + '<div class="toggles">'
     +   '<label class="tg"><input id="p_ativo" type="checkbox"'+((!p||p.ativo)?' checked':'')+'>Ativo</label>'
@@ -523,6 +541,7 @@ async function saveProduto(id){
     preco: parsePrice(val('p_preco')) ?? 0,
     promo: parsePrice(val('p_promo')),
     emoji: val('p_emoji').trim(),
+    image_url: val('p_image_url') || null,
     ativo: chk('p_ativo'),
     destaque: chk('p_destaque'),
     aceita_adicionais: chk('p_adic'),
@@ -544,6 +563,35 @@ async function delProduto(id){
     await loadProdutos();
     showToast('Excluído');
   }catch(e){ showErr(e.message); }
+}
+
+/* ================= UPLOAD DE FOTO (Supabase Storage) ================= */
+function pickFoto(){ const el=document.getElementById('p_img_file'); if(el) el.click(); }
+function removeFoto(){
+  document.getElementById('p_image_url').value='';
+  const pv=document.getElementById('p_img_prev'); if(pv){ pv.src=''; pv.classList.add('hide'); }
+  const rm=document.getElementById('p_img_rm'); if(rm) rm.style.display='none';
+}
+async function onFotoSel(ev){
+  const f=ev.target.files&&ev.target.files[0]; if(!f) return;
+  const st=document.getElementById('p_img_status');
+  const t=_tok();
+  if(!t){ if(st) st.textContent='Faça login para enviar.'; return; }
+  if(f.size>5*1024*1024){ if(st) st.textContent='Imagem muito grande (máx 5MB).'; return; }
+  if(st) st.textContent='Enviando…';
+  try{
+    const ext=((f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg');
+    const path='p_'+Date.now()+'_'+Math.floor(Math.random()*1e6)+'.'+ext;
+    const r=await fetch(SUPA.url+'/storage/v1/object/produtos/'+path,{method:'POST',
+      headers:{apikey:SUPA.key,'Authorization':'Bearer '+t,'Content-Type':(f.type||'image/jpeg'),'x-upsert':'true'},
+      body:f});
+    if(!r.ok){ if(st) st.textContent='Falha no envio ('+r.status+').'; return; }
+    const url=SUPA.url+'/storage/v1/object/public/produtos/'+path;
+    document.getElementById('p_image_url').value=url;
+    const pv=document.getElementById('p_img_prev'); if(pv){ pv.src=url; pv.classList.remove('hide'); }
+    const rm=document.getElementById('p_img_rm'); if(rm) rm.style.display='';
+    if(st) st.textContent='Foto enviada ✓';
+  }catch(e){ if(st) st.textContent='Falha no envio.'; }
 }
 
 /* ================= FORM: CATEGORIA ================= */
