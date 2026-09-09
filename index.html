@@ -242,6 +242,20 @@
   .wa-preview{text-align:left;background:var(--card);border:1px solid var(--borda);border-radius:14px;padding:14px;
     margin:16px 0 4px;font-size:13px;color:#dcffe6;white-space:pre-line;line-height:1.55;max-height:220px;overflow-y:auto;}
   .wa-preview .wa-h{color:var(--neon);font-weight:800;margin-bottom:6px;}
+  /* ===== cupom ===== */
+  .cup-row{display:flex;gap:8px;}
+  .cup-row input{flex:1;text-transform:uppercase;}
+  .cup-btn{flex:none;border:none;cursor:pointer;font-weight:800;font-size:14px;color:#04161a;
+    background:linear-gradient(145deg,var(--neon),var(--turquesa));padding:0 18px;border-radius:12px;}
+  .cup-msg{font-size:12.5px;margin-top:7px;min-height:16px;}
+  .cup-msg.ok{color:var(--neon);} .cup-msg.bad{color:#ff7a7a;}
+  .promo-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .promo-chip{cursor:pointer;font-size:12px;font-weight:700;color:var(--amarelo);
+    background:var(--card);border:1px dashed rgba(255,208,46,.5);border-radius:10px;padding:7px 10px;line-height:1.2;}
+  .promo-chip small{display:block;color:var(--cinza2);font-weight:600;font-size:10.5px;margin-top:2px;}
+  /* ===== fotos de produto ===== */
+  .dest-img img,.pimg img,.det-hero img{width:100%;height:100%;object-fit:cover;display:block;}
+  .det-hero img{position:absolute;inset:0;}
   .hidden{display:none !important;}
 </style>
 </head>
@@ -371,9 +385,17 @@
     </div>
     <label class="fld">Observações gerais</label>
     <textarea id="f_obs" placeholder="Ex: capricha no molho..."></textarea>
+    <label class="fld">Cupom de desconto</label>
+    <div class="cup-row">
+      <input id="f_cupom" placeholder="Digite o código" autocapitalize="characters" />
+      <button type="button" class="cup-btn" onclick="aplicarCupom()">Aplicar</button>
+    </div>
+    <div id="cupomMsg" class="cup-msg"></div>
+    <div id="promoChips" class="promo-chips"></div>
     <div class="totbox">
       <div class="totrow"><span>Subtotal</span><span id="ck_sub">R$ 0,00</span></div>
       <div class="totrow" id="ck_taxaRow"><span>Taxa de entrega</span><span id="ck_taxa">R$ 0,00</span></div>
+      <div class="totrow" id="ck_descRow" style="display:none"><span id="ck_descLbl">Desconto</span><span id="ck_desc" style="color:var(--neon)">- R$ 0,00</span></div>
       <div class="totrow big"><span>Total</span><b id="ck_total">R$ 0,00</b></div>
     </div>
   </div>
@@ -506,7 +528,7 @@ MENU.forEach((sec,ci)=> sec.items.forEach((it,ii)=>{
   if(!it.feat) return;
   const c = document.createElement("div");
   c.className="dest-card";
-  c.innerHTML = `<div class="dest-img">${sec.emoji}
+  c.innerHTML = `<div class="dest-img">${it.img?`<img src="${it.img}" alt="${it.n}">`:sec.emoji}
       ${it.old?`<span class="badge-disc">-${pct(it.old,it.p)}%</span>`:""}
       ${it.tag?`<span class="badge-top">${it.tag}</span>`:""}</div>
     <div class="dest-price">${brl(it.p)}${it.old?`<span class="dest-old">${brl(it.old)}</span>`:""}</div>
@@ -541,7 +563,7 @@ MENU.forEach((sec,ci)=>{
         <span class="price">${brl(it.p)}</span>${it.old?`<span class="old">${brl(it.old)}</span>`:""}
       </div>
       <div class="pimgwrap">
-        <div class="pimg">${sec.emoji}</div>
+        <div class="pimg">${it.img?`<img src="${it.img}" alt="${it.n}">`:sec.emoji}</div>
         <button class="plus" aria-label="adicionar">+</button>
       </div>`;
     row.querySelector(".pinfo").onclick=()=>openDetail(ci,ii);
@@ -578,7 +600,7 @@ async function loadMenu(){
     if(Array.isArray(cats)&&cats.length&&Array.isArray(prods)){
       MENU=cats.map(c=>({cat:c.nome,emoji:c.emoji||"🍔",
         items:prods.filter(p=>p.categoria_id===c.id).map(p=>({
-          id:p.id, n:p.nome, p:Number(p.preco), d:p.descricao||"",
+          id:p.id, n:p.nome, p:Number(p.preco), d:p.descricao||"", img:p.image_url||null,
           old:(p.promo!=null?Number(p.promo):undefined),
           feat:!!p.destaque, tag:(p.destaque?"Destaque":undefined)
         }))
@@ -590,6 +612,19 @@ async function loadMenu(){
   renderMenu();
 }
 loadMenu();
+
+/* ===== cupons públicos (para exibir e estimar desconto) ===== */
+let PROMOS=[];
+async function loadPromos(){
+  try{
+    const H={apikey:SUPA.key,Authorization:"Bearer "+SUPA.key};
+    const r=await fetch(SUPA.url+"/rest/v1/cupons?select=codigo,tipo,valor,descricao,min_pedido&ativo=eq.true",{headers:H});
+    const j=await r.json();
+    if(Array.isArray(j)) PROMOS=j;
+  }catch(e){}
+  renderPromos();
+}
+loadPromos();
 
 /* ===================== QUICK ADD (botão +) ===================== */
 function quickAdd(ci,ii){
@@ -615,7 +650,7 @@ function openDetail(ci,ii){
         <div id="adicctrl-${k}"></div></div>`).join("");
   }
   document.getElementById("detailScroll").innerHTML=`
-    <div class="det-hero"><button class="det-back" onclick="closeDetail()">‹</button>${MENU[ci].emoji}</div>
+    <div class="det-hero"><button class="det-back" onclick="closeDetail()">‹</button>${it.img?`<img src="${it.img}" alt="${it.n}">`:MENU[ci].emoji}</div>
     <div class="det-body">
       <h2>${it.n}</h2>
       <p class="ddesc">${it.d}</p>
@@ -730,13 +765,55 @@ function toggleTroco(){ const din=document.querySelector('input[name="pg"]:check
 function updateTotals(){
   const {sub}=totals();
   const taxa=isEntrega()?CONFIG.taxaEntrega:0;
+  const desc=estimaDesconto(sub);
   document.getElementById("ck_sub").textContent=brl(sub);
   document.getElementById("ck_taxa").textContent=taxa>0?brl(taxa):"Grátis";
   document.getElementById("ck_taxaRow").querySelector("span:first-child").textContent=isEntrega()?"Taxa de entrega":"Retirada no local";
-  document.getElementById("ck_total").textContent=brl(sub+taxa);
+  const dr=document.getElementById("ck_descRow");
+  if(desc>0){ dr.style.display=""; document.getElementById("ck_desc").textContent="- "+brl(desc);
+    document.getElementById("ck_descLbl").textContent="Desconto"+(cupomInfo?" ("+cupomInfo.codigo+")":""); }
+  else { dr.style.display="none"; }
+  document.getElementById("ck_total").textContent=brl(Math.max(0,sub+taxa-desc));
 }
 function val(id){ return (document.getElementById(id).value||"").trim(); }
 function show_err(id,on){ document.getElementById(id).style.display=on?"block":"none"; }
+
+/* ===================== CUPOM ===================== */
+let cupomInfo=null; // {codigo,tipo,valor,min_pedido} se for cupom público conhecido
+function estimaDesconto(sub){
+  if(!cupomInfo) return 0;
+  if(cupomInfo.min_pedido!=null && sub < Number(cupomInfo.min_pedido)) return 0;
+  let d = cupomInfo.tipo==='percent' ? sub*Number(cupomInfo.valor)/100 : Number(cupomInfo.valor);
+  if(d>sub) d=sub;
+  return Math.round(d*100)/100;
+}
+function renderPromos(){
+  const el=document.getElementById("promoChips"); if(!el) return;
+  el.innerHTML = PROMOS.map(c=>{
+    const v = c.tipo==='percent' ? (Number(c.valor)+"% OFF") : ("R$ "+Number(c.valor).toFixed(2).replace(".",",")+" OFF");
+    return `<div class="promo-chip" onclick="usarPromo('${c.codigo}')">${c.codigo} · ${v}${c.descricao?`<small>${c.descricao}</small>`:""}</div>`;
+  }).join("");
+}
+function usarPromo(cod){ const el=document.getElementById("f_cupom"); if(el){ el.value=cod; } aplicarCupom(); }
+function aplicarCupom(){
+  const raw=(document.getElementById("f_cupom").value||"").trim().toUpperCase();
+  document.getElementById("f_cupom").value=raw;
+  const msg=document.getElementById("cupomMsg");
+  cupomInfo=null;
+  if(!raw){ msg.className="cup-msg"; msg.textContent=""; updateTotals(); return; }
+  const found=PROMOS.find(c=>String(c.codigo).toUpperCase()===raw);
+  if(found){
+    const {sub}=totals();
+    if(found.min_pedido!=null && sub<Number(found.min_pedido)){
+      msg.className="cup-msg bad"; msg.textContent="Cupom exige pedido mínimo de "+brl(Number(found.min_pedido))+".";
+    } else {
+      cupomInfo=found; msg.className="cup-msg ok"; msg.textContent="Cupom aplicado ✓";
+    }
+  } else {
+    msg.className="cup-msg"; msg.textContent="Cupom será validado ao confirmar.";
+  }
+  updateTotals();
+}
 
 let lastOrderUrl="";
 
@@ -775,7 +852,7 @@ async function confirmarPedido(){
   const payload={ p_cliente:nome, p_whatsapp:fone, p_tipo:tipo,
     p_endereco:endereco, p_bairro: tipo==="entrega"?val("f_bairro"):"",
     p_pagamento:pg, p_troco:(pg==="Dinheiro"?val("f_troco"):""), p_obs:val("f_obs"),
-    p_items };
+    p_items, p_cupom:(document.getElementById("f_cupom").value||"").trim() };
 
   const btn=document.querySelector('#checkoutSheet .btn-primary');
   _enviando=true; if(btn){btn.disabled=true;btn.textContent="Enviando…";}
@@ -819,7 +896,7 @@ ${entregaTxt}
 *Itens:*
 ${itens}
 *Subtotal:* ${brl(j.subtotal)}
-${j.taxa>0?"*Taxa de entrega:* "+brl(j.taxa)+"\n":""}*Total:* ${brl(j.total)}
+${j.taxa>0?"*Taxa de entrega:* "+brl(j.taxa)+"\n":""}${j.desconto>0?"*Desconto"+(j.cupom?" ("+j.cupom+")":"")+":* -"+brl(j.desconto)+"\n":""}*Total:* ${brl(j.total)}
 
 ${pgTxt}${obs?"\n\n*Observações:* "+obs:""}`;
 
@@ -832,10 +909,11 @@ ${pgTxt}${obs?"\n\n*Observações:* "+obs:""}`;
 function enviarPedidoWhats(){ if(lastOrderUrl) window.open(lastOrderUrl,"_blank"); }
 
 function novoPedido(){
-  cart=[]; lastOrderUrl="";
-  ["f_nome","f_fone","f_rua","f_num","f_bairro","f_comp","f_ref","f_troco","f_obs"].forEach(id=>{
+  cart=[]; lastOrderUrl=""; cupomInfo=null;
+  ["f_nome","f_fone","f_rua","f_num","f_bairro","f_comp","f_ref","f_troco","f_obs","f_cupom"].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value="";
   });
+  const cm=document.getElementById("cupomMsg"); if(cm){ cm.textContent=""; cm.className="cup-msg"; }
   syncAll(); closeSheets();
   window.scrollTo({top:0,behavior:"smooth"});
 }
