@@ -657,7 +657,7 @@ VIEWS.pedidos=function(){
         <div class="kh"><span class="num">#${esc(o.numero)}</span><span class="time">${timeAgo(o.created_at)} atrás</span></div>
         <div class="cli">${esc(o.cliente)}</div>
         <div class="addr">${o.tipo==="retirada"?"🏠 Retirada no balcão":"📍 "+esc(o.endereco)+" · "+esc(o.bairro)}</div>
-        <div class="ktot">${brl(o.total)}</div>
+        <div class="kitems" style="font-size:11.5px;opacity:.85;margin:5px 0 3px;line-height:1.45">${(o.itens||[]).map(it=>it.qty+"&times; "+esc(it.nome)+(it.adic&&it.adic.length?" (+"+it.adic.map(a=>esc(a.nome)).join(", ")+")":"")).join("<br>")}</div><div class="ktot">${brl(o.total)}</div>
         <div class="tags">
           <span class="tag tipo">${tipoLabel(o.tipo)}</span>
           <span class="tag pay">${esc(o.pagamento)}</span>
