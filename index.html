@@ -256,6 +256,19 @@
   /* ===== fotos de produto ===== */
   .dest-img img,.pimg img,.det-hero img{width:100%;height:100%;object-fit:cover;display:block;}
   .det-hero img{position:absolute;inset:0;}
+  /* ===== enderecos salvos ===== */
+  .saved-addr{margin-bottom:6px;}
+  .saved-addr .sa-title{font-size:12.5px;color:var(--cinza);font-weight:600;margin:4px 0 6px;}
+  .sa-card{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--borda);
+    border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:.15s;}
+  .sa-card.sel{border-color:var(--neon);box-shadow:0 0 0 1px var(--neon) inset;}
+  .sa-card .sa-ico{font-size:16px;}
+  .sa-card .sa-txt{flex:1;min-width:0;font-size:13px;line-height:1.35;}
+  .sa-card .sa-txt b{display:block;font-size:13.5px;color:var(--branco);}
+  .sa-card .sa-txt small{color:var(--cinza);}
+  .sa-card .sa-del{border:none;background:transparent;color:var(--cinza2);font-size:16px;cursor:pointer;padding:2px 4px;}
+  .sa-new{width:100%;text-align:left;border:1px dashed var(--borda);background:transparent;color:var(--neon);
+    border-radius:12px;padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px;}
   .hidden{display:none !important;}
 </style>
 </head>
@@ -363,6 +376,7 @@
       <label><input type="radio" name="tipo" value="Retirada" onchange="toggleEntrega()"><span>🏠 Retirada</span></label>
     </div>
     <div id="enderecoBox">
+      <div id="savedAddr" class="saved-addr"></div>
       <label class="fld">Endereço (rua) <span class="req">*</span></label>
       <input id="f_rua" placeholder="Rua / Avenida" />
       <div class="grid2">
@@ -729,7 +743,14 @@ function closeSheets(){
   document.body.style.overflow="";
 }
 function backToCart(){ renderCart(); showSheet("cartSheet"); }
-function goCheckout(){ if(totals().count===0)return; if(totals().sub<CONFIG.minPedido)return; updateTotals(); showSheet("checkoutSheet"); }
+function goCheckout(){
+  if(totals().count===0)return; if(totals().sub<CONFIG.minPedido)return;
+  updateTotals();
+  prefillCliente();
+  if(isEntrega()){ var ar=getEnderecos(); if(ar.length && !val("f_rua")){ _addrSel=ar[0].id; fillAddr(ar[0]); } }
+  renderSavedAddr();
+  showSheet("checkoutSheet");
+}
 
 function renderCart(){
   const body=document.getElementById("cartBody");
@@ -759,7 +780,7 @@ function renderCart(){
 
 /* ===================== CHECKOUT ===================== */
 function isEntrega(){ return document.querySelector('input[name="tipo"]:checked').value==="Entrega"; }
-function toggleEntrega(){ document.getElementById("enderecoBox").classList.toggle("hidden",!isEntrega()); updateTotals(); }
+function toggleEntrega(){ document.getElementById("enderecoBox").classList.toggle("hidden",!isEntrega()); updateTotals(); if(isEntrega()) renderSavedAddr(); }
 function toggleTroco(){ const din=document.querySelector('input[name="pg"]:checked').value==="Dinheiro";
   document.getElementById("trocoBox").classList.toggle("hidden",!din); }
 function updateTotals(){
@@ -815,6 +836,63 @@ function aplicarCupom(){
   updateTotals();
 }
 
+/* ============ PERFIL + ENDERECOS SALVOS (no aparelho do cliente) ============ */
+function _lget(k,def){ try{ var v=JSON.parse(localStorage.getItem(k)); return (v===null||v===undefined)?def:v; }catch(e){ return def; } }
+function _lset(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function getCliente(){ return _lget("pb_cliente", null); }
+function getEnderecos(){ var a=_lget("pb_enderecos", []); return Array.isArray(a)?a:[]; }
+function addrLabel(a){ return (a.rua||"")+(a.num?", "+a.num:"")+(a.bairro?" - "+a.bairro:""); }
+function prefillCliente(){
+  var c=getCliente(); if(!c) return;
+  var n=document.getElementById("f_nome"), f=document.getElementById("f_fone");
+  if(n && !n.value && c.nome) n.value=c.nome;
+  if(f && !f.value && c.whatsapp) f.value=c.whatsapp;
+}
+let _addrSel=null;
+function fillAddr(a){
+  document.getElementById("f_rua").value=a.rua||"";
+  document.getElementById("f_num").value=a.num||"";
+  document.getElementById("f_bairro").value=a.bairro||"";
+  document.getElementById("f_comp").value=a.comp||"";
+  document.getElementById("f_ref").value=a.ref||"";
+}
+function selectAddr(id){ var a=getEnderecos().find(x=>x.id===id); if(!a) return; _addrSel=id; fillAddr(a); renderSavedAddr(); }
+function newAddr(){ _addrSel=null; fillAddr({}); renderSavedAddr(); var r=document.getElementById("f_rua"); if(r) r.focus(); }
+function delAddr(id, ev){
+  if(ev) ev.stopPropagation();
+  var arr=getEnderecos().filter(x=>x.id!==id); _lset("pb_enderecos", arr);
+  if(_addrSel===id) _addrSel=null;
+  renderSavedAddr();
+}
+function renderSavedAddr(){
+  var el=document.getElementById("savedAddr"); if(!el) return;
+  var arr=getEnderecos();
+  if(!arr.length){ el.innerHTML=""; return; }
+  var html='<div class="sa-title">Enderecos salvos</div>';
+  arr.forEach(a=>{
+    html+='<div class="sa-card'+(_addrSel===a.id?' sel':'')+'" onclick="selectAddr('+a.id+')">'
+      +'<span class="sa-ico">📍</span>'
+      +'<div class="sa-txt"><b>'+escapeHtml(addrLabel(a))+'</b>'+((a.comp||a.ref)?'<small>'+escapeHtml([a.comp,a.ref].filter(Boolean).join(" · "))+'</small>':'')+'</div>'
+      +'<button type="button" class="sa-del" onclick="delAddr('+a.id+',event)" title="remover">✕</button>'
+      +'</div>';
+  });
+  html+='<button type="button" class="sa-new" onclick="newAddr()">➕ Usar outro endereco</button>';
+  el.innerHTML=html;
+}
+function salvarClienteEndereco(nome, fone){
+  _lset("pb_cliente", {nome:nome, whatsapp:fone});
+  if(!isEntrega()) return;
+  var a={ rua:val("f_rua"), num:val("f_num"), bairro:val("f_bairro"), comp:val("f_comp"), ref:val("f_ref") };
+  if(!a.rua) return;
+  var arr=getEnderecos();
+  var key=x=>((x.rua||"")+"|"+(x.num||"")+"|"+(x.bairro||"")).toLowerCase().trim();
+  var ex=arr.find(x=>key(x)===key(a));
+  if(ex){ Object.assign(ex, a); }
+  else { a.id=Date.now(); arr.unshift(a); }
+  if(arr.length>6) arr=arr.slice(0,6);
+  _lset("pb_enderecos", arr);
+}
+
 let lastOrderUrl="";
 
 // número de pedido sequencial por dispositivo (começa em 1001)
@@ -834,6 +912,7 @@ async function confirmarPedido(){
   const endOk=!isEntrega()||val("f_rua").length>=3;
   show_err("e_nome",!nomeOk); show_err("e_fone",!foneOk); show_err("e_end",!endOk);
   if(!(nomeOk&&foneOk&&endOk)) return;
+  salvarClienteEndereco(nome, fone);
 
   const pg=document.querySelector('input[name="pg"]:checked').value;
   const tipo=isEntrega()?"entrega":"retirada";
