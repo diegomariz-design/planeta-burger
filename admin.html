@@ -1290,5 +1290,48 @@ document.addEventListener("keydown",e=>{
   setInterval(function(){ sync(window.__view==="clientes"); }, 90000);
 })();
 </script>
+<script>/* PB-CUPONS: painel de cupons ligado a tabela real */
+(function(){
+  var U="https://ldjpwamrlbzppkgukmlo.supabase.co", A="sb_publishable_gkU4l7qMVchUVMT9TXIp_g_0ohm7pp1";
+  function _tk(){ try{var s=JSON.parse(localStorage.getItem("pb_admin_session")||"null"); return s&&s.access_token;}catch(e){return null;} }
+  function H(){ var t=_tk(); return {apikey:A, Authorization:"Bearer "+t, "Content-Type":"application/json"}; }
+  function mapRow(c){ return {id:c.id, codigo:c.codigo, tipo:(c.tipo==="fixo"?"R$":"%"), valor:Number(c.valor), ativo:!!c.ativo, validade:c.validade||"", usos:c.usos||0}; }
+  var origGo=window.go;
+  async function sync(rerender){
+    var t=_tk(); if(!t||typeof DB==="undefined") return;
+    try{
+      var r=await fetch(U+"/rest/v1/cupons?select=*&order=id.asc",{headers:{apikey:A,Authorization:"Bearer "+t}});
+      if(!r.ok) return; var rows=await r.json();
+      if(Array.isArray(rows)){ DB.coupons=rows.map(mapRow); if(rerender && window.__view==="cupons" && typeof origGo==="function"){ try{origGo("cupons");}catch(e){} } }
+    }catch(e){}
+  }
+  window.sbSyncCupons=sync;
+  var _origSave=window.saveCoupon;
+  window.saveCoupon=async function(id){
+    var cod=(document.getElementById("cp_cod").value||"").trim().toUpperCase();
+    var tipoSel=document.getElementById("cp_tipo").value;
+    var valor=Number(document.getElementById("cp_val").value)||0;
+    var validade=document.getElementById("cp_val2").value||null;
+    var ativo=!!document.getElementById("cp_ativo").checked;
+    try{ if(typeof _origSave==="function") _origSave.apply(this,arguments); }catch(e){}
+    if(!cod){ return; }
+    var t=_tk(); if(!t){ return; }
+    var body={codigo:cod, tipo:(tipoSel==="R$"?"fixo":"percent"), valor:valor, validade:validade, ativo:ativo};
+    try{ await fetch(U+"/rest/v1/cupons?on_conflict=codigo",{method:"POST",headers:Object.assign(H(),{Prefer:"resolution=merge-duplicates,return=representation"}),body:JSON.stringify(body)}); await sync(true); }catch(e){}
+  };
+  var _origToggle=window.toggleCoupon;
+  window.toggleCoupon=async function(id){
+    var c=(DB.coupons||[]).find(function(x){return String(x.id)===String(id);});
+    var target = c ? !c.ativo : null;
+    try{ if(typeof _origToggle==="function") _origToggle.apply(this,arguments); }catch(e){}
+    if(c===undefined||c===null) return; var t=_tk(); if(!t) return;
+    try{ await fetch(U+"/rest/v1/cupons?id=eq."+c.id,{method:"PATCH",headers:H(),body:JSON.stringify({ativo:target})}); await sync(true); }catch(e){}
+  };
+  if(typeof origGo==="function"){ window.go=function(v){ window.__view=v; var r=origGo.apply(this,arguments); if(v==="cupons"){ sync(true); } return r; }; }
+  var _boot=window.boot;
+  if(typeof _boot==="function"){ window.boot=function(){ var r=_boot.apply(this,arguments); setTimeout(function(){sync(false);},500); return r; }; }
+  setTimeout(function(){ sync(window.__view==="cupons"); }, 2200);
+})();
+</script>
 </body>
 </html>
