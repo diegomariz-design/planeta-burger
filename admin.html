@@ -720,7 +720,7 @@ function setStatus(id,status){
     `<p style="color:var(--cinza);font-size:13px">Mensagem pronta para enviar ao cliente <b style="color:#fff">${esc(o.cliente)}</b>:</p>
      <div class="od-items" style="white-space:pre-line;color:#dcede8">${esc(msg)}</div>`,
     `<button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
-     <button class="btn btn-wa" onclick="window.open(waLink('${o.whatsapp}',${JSON.stringify(msg)}),'_blank')">💬 Enviar no WhatsApp</button>`);
+     <button class="btn btn-wa" onclick="window.open(waLink('${o.whatsapp}',${esc(JSON.stringify(msg))}),'_blank')">💬 Enviar no WhatsApp</button>`);
   toast("Status atualizado e registrado.");
 }
 
@@ -762,7 +762,7 @@ function confirmCancel(id){
   openModal("Pedido cancelado",
     `<div class="od-items" style="white-space:pre-line;color:#dcede8">${esc(msg)}</div>`,
     `<button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
-     <button class="btn btn-wa" onclick="window.open(waLink('${o.whatsapp}',${JSON.stringify(msg)}),'_blank')">💬 Avisar cliente</button>`);
+     <button class="btn btn-wa" onclick="window.open(waLink('${o.whatsapp}',${esc(JSON.stringify(msg))}),'_blank')">💬 Avisar cliente</button>`);
   toast("Pedido cancelado e registrado.");
 }
 function printSep(id){
